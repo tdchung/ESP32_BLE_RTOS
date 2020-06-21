@@ -57,7 +57,7 @@ typedef enum
 
 // mode tracker
 volatile led_mode_t led_mode = NONE;
-bool isConnected = false;
+// bool isConnected = false;
 
 // r,g,b is gobal so we can get and set them at anywhere in our program
 int r = 0;
@@ -74,6 +74,7 @@ SemaphoreHandle_t mutex_v;
 
 SemaphoreHandle_t mutex_led_mode;
 
+/*------------------------safe--------------------------*/
 led_mode_t get_led_mode()
 {
     led_mode_t temp;
@@ -110,7 +111,7 @@ int debug(const char *fmt, ...)
 #endif
 }
 
-static int biggest(int x, int y, int z)
+static int _biggest(int x, int y, int z)
 {
     return x > y ? (x > z ? 1 : 3) : (y > z ? 2 : 3);
 }
@@ -134,7 +135,7 @@ void color_collection(void)
 
 void fading_led(void)
 {
-    int index = biggest(r, g, b);
+    int index = _biggest(r, g, b);
     int max_loop = ((1 == index) ? r : (2 == index) ? g : b);
 
     // // mode 2
@@ -243,6 +244,26 @@ void parse_lte_msg(const char *msg)
     free(temp);
 }
 
+void BLESerialCallBack(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
+{
+
+    if (event == ESP_SPP_SRV_OPEN_EVT)
+    {
+        debug("Client Connected has address: %02X:%02X:%02X:%02X:%02X:%02X",
+              param->srv_open.rem_bda[0],
+              param->srv_open.rem_bda[1],
+              param->srv_open.rem_bda[2],
+              param->srv_open.rem_bda[3],
+              param->srv_open.rem_bda[4],
+              param->srv_open.rem_bda[5]);
+    }
+
+    if (event == ESP_SPP_CLOSE_EVT)
+    {
+        debug("Client disconnected...");
+    }
+}
+
 // define two tasks for Blink & AnalogRead
 void TaskBLE(void *pvParameters);
 void taskLed(void *pvParameters);
@@ -271,7 +292,15 @@ void setup()
     mutex_led_mode = xSemaphoreCreateMutex();
 
     // BLE setting
-    SerialBT.begin("ESP32test");
+    SerialBT.register_callback(BLESerialCallBack);
+    if (!SerialBT.begin("ESP32"))
+    {
+        debug("An error occurred initializing Bluetooth");
+    }
+    else
+    {
+        debug("Bluetooth initialized");
+    }
     debug("The device started, now you can pair it with bluetooth!");
 
     // Now set up two tasks to run independently.
@@ -390,25 +419,26 @@ void taskLed(void *pvParameters)
     }
 }
 
+/* this is the debug task*/
 void taskCheckMode(void *pvParameters)
 {
     (void)pvParameters;
     led_mode_t old_mode = NONE;
-    bool oldConnectionState = false;
+    // bool oldConnectionState = false;
     for (;;)
     {
-        isConnected = SerialBT.hasClient();
+        // isConnected = SerialBT.hasClient();
 
         if (old_mode != get_led_mode())
         {
             old_mode = get_led_mode();
             debug("DEBUG LED MODE: %d", (int)get_led_mode());
         }
-        if (oldConnectionState != isConnected)
-        {
-            oldConnectionState = isConnected;
-            debug("BLE status: %s", (isConnected == true) ? "Connected" : "Disconnected");
-        }
-        vTaskDelay(500);
+        // if (oldConnectionState != isConnected)
+        // {
+        //     oldConnectionState = isConnected;
+        //     debug("BLE status: %s", (isConnected == true) ? "Connected" : "Disconnected");
+        // }
+        // vTaskDelay(500);
     }
 }
